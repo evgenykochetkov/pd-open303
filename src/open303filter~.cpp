@@ -87,11 +87,22 @@ static void open303filter_free(t_open303filter *x) {
 static void *open303filter_new(t_symbol *s, int ac, t_atom *av) {
     t_open303filter *x = (t_open303filter *)pd_new(open303filter_class);
 
+    t_float cutoff = 20000;
+    t_float resonance = 0;
+    if (ac && av->a_type == A_FLOAT) {
+        cutoff = av->a_w.w_float;
+        ac--; av++;
+
+        if (ac && av->a_type == A_FLOAT) {
+            resonance = av->a_w.w_float;
+        }
+    }
+
     x->cutoff_inlet = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
-    pd_float((t_pd *)x->cutoff_inlet, 0.0);
+    pd_float((t_pd *)x->cutoff_inlet, cutoff);
 
     x->resonance_inlet = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
-    pd_float((t_pd *)x->resonance_inlet, 0.0);
+    pd_float((t_pd *)x->resonance_inlet, resonance);
 
     x->filter.setMode(rosic::TeeBeeFilter::TB_303);
     x->highpass1.setMode(rosic::OnePoleFilter::HIGHPASS);
