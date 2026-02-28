@@ -84,7 +84,7 @@ static void open303filter_free(t_open303filter *x) {
     inlet_free(x->resonance_inlet);
 }
 
-static void *open303filter_new(t_symbol *s, int ac, t_atom *av) {
+static void *open303filter_new(t_symbol *, int ac, t_atom *av) {
     t_open303filter *x = (t_open303filter *)pd_new(open303filter_class);
 
     t_float cutoff = 20000;
