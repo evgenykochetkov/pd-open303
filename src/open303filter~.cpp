@@ -15,24 +15,24 @@ static t_class *open303filter_class;
 
 typedef struct _open303filter {
     t_object x_obj;
-    t_inlet *x_inlet;
-    t_inlet *x_inlet2;
-    t_float x_sr;
-    rosic::TeeBeeFilter x_filter;
-    rosic::OnePoleFilter x_highpass1;
-    rosic::OnePoleFilter x_highpass2;
-    rosic::OnePoleFilter x_allpass;
-    rosic::BiquadFilter x_notch;
-    rosic::EllipticQuarterBandFilter x_antiAliasFilter;
+    t_inlet *cutoff_inlet;
+    t_inlet *resonance_inlet;
+    t_float current_sample_rate;
+    rosic::TeeBeeFilter filter;
+    rosic::OnePoleFilter highpass1;
+    rosic::OnePoleFilter highpass2;
+    rosic::OnePoleFilter allpass;
+    rosic::BiquadFilter notch;
+    rosic::EllipticQuarterBandFilter anti_alias_filter;
 } t_open303filter;
 
 static void open303filter_reset(t_open303filter *x) {
-    x->x_filter.reset();
-    x->x_highpass1.reset();
-    x->x_highpass2.reset();
-    x->x_allpass.reset();
-    x->x_notch.reset();
-    x->x_antiAliasFilter.reset();
+    x->filter.reset();
+    x->highpass1.reset();
+    x->highpass2.reset();
+    x->allpass.reset();
+    x->notch.reset();
+    x->anti_alias_filter.reset();
 }
 
 static t_int *open303filter_perform(t_int *w) {
@@ -45,19 +45,19 @@ static t_int *open303filter_perform(t_int *w) {
 
     double tmp;
     for (int i = 0; i < n_samples; i++) {
-        x->x_filter.setCutoff(cutoff[i], false);
-        x->x_filter.setResonance(resonance[i] * 100.0, false);
-        x->x_filter.calculateCoefficientsApprox4();
+        x->filter.setCutoff(cutoff[i], false);
+        x->filter.setResonance(resonance[i] * 100.0, false);
+        x->filter.calculateCoefficientsApprox4();
 
         for (int os = 1; os <= OVERSAMPLING; os++) {
             tmp = -in[i];                                  // the raw input signal
-            tmp = x->x_highpass1.getSample(tmp);       // pre-filter highpass
-            tmp = x->x_filter.getSample(tmp);          // now it's filtered
-            tmp = x->x_antiAliasFilter.getSample(tmp); // anti-aliasing filtered
+            tmp = x->highpass1.getSample(tmp);       // pre-filter highpass
+            tmp = x->filter.getSample(tmp);          // now it's filtered
+            tmp = x->anti_alias_filter.getSample(tmp); // anti-aliasing filtered
         }
-        tmp = x->x_allpass.getSample(tmp);
-        tmp = x->x_highpass2.getSample(tmp);
-        tmp = x->x_notch.getSample(tmp);
+        tmp = x->allpass.getSample(tmp);
+        tmp = x->highpass2.getSample(tmp);
+        tmp = x->notch.getSample(tmp);
 
         out[i] = tmp;
     }
@@ -66,46 +66,46 @@ static t_int *open303filter_perform(t_int *w) {
 }
 
 static void open303filter_dsp(t_open303filter *x, t_signal **sp) {
-    if(sp[0]->s_sr != x->x_sr){
-        x->x_sr = sp[0]->s_sr;
+    if (sp[0]->s_sr != x->current_sample_rate) {
+        x->current_sample_rate = sp[0]->s_sr;
 
-        x->x_filter.setSampleRate(OVERSAMPLING * x->x_sr);
-        x->x_highpass1.setSampleRate(OVERSAMPLING * x->x_sr);
+        x->filter.setSampleRate(OVERSAMPLING * x->current_sample_rate);
+        x->highpass1.setSampleRate(OVERSAMPLING * x->current_sample_rate);
 
-        x->x_highpass2.setSampleRate(x->x_sr);
-        x->x_allpass.setSampleRate(x->x_sr);
-        x->x_notch.setSampleRate(x->x_sr);
+        x->highpass2.setSampleRate(x->current_sample_rate);
+        x->allpass.setSampleRate(x->current_sample_rate);
+        x->notch.setSampleRate(x->current_sample_rate);
     }
     dsp_add(open303filter_perform, 6, x, sp[0]->s_n, sp[0]->s_vec, sp[1]->s_vec, sp[2]->s_vec, sp[3]->s_vec);
 }
 
 static void open303filter_free(t_open303filter *x) {
-    inlet_free(x->x_inlet);
-    inlet_free(x->x_inlet2);
+    inlet_free(x->cutoff_inlet);
+    inlet_free(x->resonance_inlet);
 }
 
 static void *open303filter_new(t_symbol *s, int ac, t_atom *av) {
     t_open303filter *x = (t_open303filter *)pd_new(open303filter_class);
 
-    x->x_inlet = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
-    pd_float((t_pd *)x->x_inlet, 0.0);
+    x->cutoff_inlet = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
+    pd_float((t_pd *)x->cutoff_inlet, 0.0);
 
-    x->x_inlet2 = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
-    pd_float((t_pd *)x->x_inlet2, 0.0);
+    x->resonance_inlet = inlet_new((t_object *)x, (t_pd *)x, &s_signal, &s_signal);
+    pd_float((t_pd *)x->resonance_inlet, 0.0);
 
-    x->x_filter.setMode(rosic::TeeBeeFilter::TB_303);
-    x->x_highpass1.setMode(rosic::OnePoleFilter::HIGHPASS);
-    x->x_highpass2.setMode(rosic::OnePoleFilter::HIGHPASS);
-    x->x_allpass.setMode(rosic::OnePoleFilter::ALLPASS);
-    x->x_notch.setMode(rosic::BiquadFilter::BANDREJECT);
+    x->filter.setMode(rosic::TeeBeeFilter::TB_303);
+    x->highpass1.setMode(rosic::OnePoleFilter::HIGHPASS);
+    x->highpass2.setMode(rosic::OnePoleFilter::HIGHPASS);
+    x->allpass.setMode(rosic::OnePoleFilter::ALLPASS);
+    x->notch.setMode(rosic::BiquadFilter::BANDREJECT);
 
     // tweakables:
-    x->x_highpass1.setCutoff(44.486);
-    x->x_highpass2.setCutoff(24.167);
-    x->x_allpass.setCutoff(14.008);
-    x->x_notch.setFrequency(7.5164);
-    x->x_notch.setBandwidth(4.7);
-    x->x_filter.setFeedbackHighpassCutoff(150.0);
+    x->highpass1.setCutoff(44.486);
+    x->highpass2.setCutoff(24.167);
+    x->allpass.setCutoff(14.008);
+    x->notch.setFrequency(7.5164);
+    x->notch.setBandwidth(4.7);
+    x->filter.setFeedbackHighpassCutoff(150.0);
 
     outlet_new(&x->x_obj, gensym("signal"));
 
